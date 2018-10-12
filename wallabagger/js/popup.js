@@ -352,18 +352,6 @@ PopupController.prototype = {
         window.close();
     },
 
-    activeTab: function () {
-        return new Promise((resolve, reject) => {
-            browser.tabs.query({ 'active': true, 'currentWindow': true }, function (tabs) {
-                if (tabs[0] != null) {
-                    return resolve(tabs[0]);
-                } else {
-                    return reject(new Error('active tab not found'));
-                }
-            });
-        });
-    },
-
     _createContainerEl: function (id, label) {
         const container = document.createElement('div');
         container.setAttribute('class', 'chip-sm');
@@ -500,14 +488,7 @@ PopupController.prototype = {
         this.port = browser.runtime.connect({name: 'popup'});
         this.port.onMessage.addListener(this.messageListener.bind(this));
         this.port.postMessage({request: 'setup'});
-        this.activeTab().then(tab => {
-            this.tabUrl = tab.url;
-            this.cardTitle.textContent = tab.title;
-            this.entryUrl.textContent = /(\w+:\/\/)([^/]+)\/(.*)/.exec(tab.url)[2];
-            this.enableTagsInput();
-            this.port.postMessage({request: 'save', tabUrl: tab.url});
-        });
-        this.port.postMessage({request: 'tags'});
+        this.port.postMessage({request: "opened"});
     },
 
     showError: function (infoString) {

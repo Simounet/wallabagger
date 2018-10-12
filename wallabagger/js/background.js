@@ -6,6 +6,18 @@ if (typeof (browser) === 'undefined' && typeof (chrome) === 'object') {
     browser = chrome;
 }
 
+const userAgent = function() {
+    if( /Edge/.test(navigator.userAgent) ) {
+        return 'Edge';
+    }
+    if( /Chrom/.test(navigator.userAgent) ) {
+        return 'Chrome';
+    }
+    return 'Firefox'
+}();
+
+let actionFromClick = false;
+
 let Port = null;
 let portConnected = false;
 
@@ -43,12 +55,18 @@ CacheType.prototype = {
     }
 };
 
+const rightClickContextMenu = {
+    id: 'wallabagger-add-link',
+    title: Common.translate('Wallabag_it'),
+    contexts: ['link', 'page']
+};
+
+if (userAgent === 'Firefox') {
+    rightClickContextMenu.command = "_execute_browser_action";
+}
+
 const wallabagContextMenus = [
-    {
-        id: 'wallabagger-add-link',
-        title: Common.translate('Wallabag_it'),
-        contexts: ['link', 'page']
-    },
+    rightClickContextMenu,
     {
         type: 'separator',
         contexts: ['browser_action']
@@ -152,14 +170,15 @@ function addExistCheckListeners (enable) {
     }
 }
 
-function onContextMenusClicked (info) {
+async function onContextMenusClicked (info) {
     switch (info.menuItemId) {
         case 'wallabagger-add-link':
-            if (typeof (info.linkUrl) === 'string' && info.linkUrl.length > 0) {
-                savePageToWallabag(info.linkUrl, true);
-            } else {
-                savePageToWallabag(info.pageUrl, false);
-            }
+            const isLinkUrl = typeof (info.linkUrl) === 'string' && info.linkUrl.length > 0;
+            const url = isLinkUrl ? info.linkUrl : info.pageUrl;
+            const resetIcon = isLinkUrl;
+            actionFromClick = true;
+            await savePageToWallabag(url, resetIcon);
+            actionFromClick = false;
             break;
         case 'unread':
         case 'starred':
@@ -292,6 +311,13 @@ function onPortMessage (msg) {
                     dirtyCacheSet(msg.tabUrl, (msg.request === 'SaveStarred') ? {is_starred: msg.value} : {is_archived: msg.value});
                 }
                 break;
+            case 'opened':
+                if(actionFromClick === false) {
+                    this.activeTab().then(tab => {
+                        savePageToWallabag(tab.url, false);
+                    });
+                }
+                break;
             default: {
                 console.log(`unknown request ${JSON.stringify(msg)}`);
             }
@@ -300,6 +326,18 @@ function onPortMessage (msg) {
         browserIcon.setTimed('bad');
         postIfConnected({ response: 'error', error: error });
     }
+}
+
+function activeTab () {
+    return new Promise((resolve, reject) => {
+        browser.tabs.query({ 'active': true, 'currentWindow': true }, function (tabs) {
+            if (tabs[0] != null) {
+                return resolve(tabs[0]);
+            } else {
+                return reject(new Error('active tab not found'));
+            }
+        });
+    });
 }
 
 function onRuntimeConnect (port) {
@@ -436,7 +474,7 @@ function savePageToWallabag (url, resetIcon) {
     browserIcon.set('wip');
     existCache.set(url, existStates.wip);
     postIfConnected({ response: 'info', text: Common.translate('Saving_the_page_to_wallabag') });
-    api.SavePage(url)
+    return api.SavePage(url)
             .then(data => applyDirtyCacheLight(url, data))
             .then(data => {
                 if (!data.deleted) {
