@@ -403,6 +403,7 @@ PopupController.prototype = {
     },
 
     setArticle: function (data) {
+        this.mainCard.classList.remove('hide');
         this.articleId = data.id;
         if (data.title !== undefined) { this.cardTitle.textContent = this.decodeStr(data.title); }
         this.cardTitle.href = data.id === -1 ? '#' : `${this.apiUrl}/view/${this.articleId}`;
